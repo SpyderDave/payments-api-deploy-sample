@@ -1,0 +1,8 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: payments-api
+data:
+  LOG_LEVEL: {{ .Values.config.logLevel | quote }}
+  # replicas x DB_POOL_MAX must fit the Postgres connection budget (see docs/DESIGN.md).
+  DB_POOL_MAX: {{ .Values.config.dbPoolMax | quote }}

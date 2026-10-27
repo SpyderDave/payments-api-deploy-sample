@@ -1,0 +1,15 @@
+image:
+  digest: sha256:0000000000000000000000000000000000000000000000000000000000000000 # set by promote-prod
+
+host: payments.example.com
+secretPath: prod/payments-api
+
+config:
+  dbPoolMax: 10
+
+# Floor of 6 = 2 per zone across 3 zones: survives a zone loss at overnight load (~200-300 rps)
+# and gives headroom before the HPA reacts to the evening ramp.
+# Ceiling of 24 x dbPoolMax 10 = 240 connections max: must be agreed with the DB owner.
+autoscaling:
+  minReplicas: 6
+  maxReplicas: 24

@@ -1,0 +1,12 @@
+image:
+  digest: sha256:0000000000000000000000000000000000000000000000000000000000000000 # set by promote-staging
+
+host: payments-staging.example.com
+secretPath: staging/payments-api
+
+config:
+  dbPoolMax: 5
+
+autoscaling:
+  minReplicas: 2
+  maxReplicas: 4

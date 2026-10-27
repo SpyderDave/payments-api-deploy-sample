@@ -1,0 +1,40 @@
+# Daily batch is a CronJob, not a loop inside the API: otherwise every replica (and every HPA
+# scale-up) would run it, and it would compete with request traffic for CPU.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: payments-api-daily-batch
+spec:
+  schedule: {{ .Values.batch.schedule | quote }}
+  timeZone: {{ .Values.batch.timeZone }}
+  concurrencyPolicy: Forbid
+  startingDeadlineSeconds: 3600
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 5
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      activeDeadlineSeconds: 3600
+      ttlSecondsAfterFinished: 86400
+      template:
+        metadata:
+          labels: {{- include "payments-api.batchSelectorLabels" . | nindent 12 }}
+        spec:
+          restartPolicy: Never
+          automountServiceAccountToken: false
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 10001
+            seccompProfile: {type: RuntimeDefault}
+          containers:
+            - name: batch
+              image: {{ include "payments-api.image" . }} # same digest as the API
+              command: ["python", "-m", "app.batch"]
+              envFrom:
+                - configMapRef: {name: payments-api}
+                - secretRef: {name: payments-api}
+              resources: {{- toYaml .Values.batch.resources | nindent 16 }}
+              securityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                capabilities: {drop: [ALL]}

@@ -1,0 +1,43 @@
+# Applied once per cluster (bootstrap). Argo CD then reconciles git -> cluster.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: payments-api-staging
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/example-org/payments-api-deploy
+    targetRevision: main
+    path: charts/payments-api
+    helm:
+      releaseName: payments-api
+      valueFiles: [values.yaml, values-staging.yaml]
+  destination: {name: staging-cluster, namespace: payments-api-staging}
+  syncPolicy:
+    automated: {prune: true, selfHeal: true}
+    syncOptions: [CreateNamespace=true]
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: payments-api-prod
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/example-org/payments-api-deploy
+    targetRevision: main
+    path: charts/payments-api
+    helm:
+      releaseName: payments-api
+      valueFiles: [values.yaml, values-prod.yaml]
+  destination: {name: prod-cluster, namespace: payments-api-prod}
+  syncPolicy:
+    # Merging the prod PR *is* the approval; still auto-sync, but no auto-prune of surprises.
+    automated: {prune: false, selfHeal: true}
+    syncOptions: [CreateNamespace=true]
+  ignoreDifferences:
+    - group: apps
+      kind: Deployment
+      jsonPointers: [/spec/replicas]

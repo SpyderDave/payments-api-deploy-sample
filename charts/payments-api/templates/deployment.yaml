@@ -1,0 +1,75 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: payments-api
+  labels: {{- include "payments-api.selectorLabels" . | nindent 4 }}
+spec:
+  # replicas intentionally omitted: the HPA owns it (setting it here would reset it on every sync).
+  revisionHistoryLimit: 5
+  strategy:
+    type: RollingUpdate
+    rollingUpdate: {maxUnavailable: 0, maxSurge: 25%}
+  selector:
+    matchLabels: {{- include "payments-api.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels: {{- include "payments-api.selectorLabels" . | nindent 8 }}
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8000"
+        prometheus.io/path: /metrics
+        # Roll pods when config changes (envFrom doesn't trigger a restart by itself).
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+    spec:
+      serviceAccountName: payments-api
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: 45
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        seccompProfile: {type: RuntimeDefault}
+      # Spread across zones (hard) and nodes (soft) so one zone/node loss isn't an outage.
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: topology.kubernetes.io/zone
+          whenUnsatisfiable: DoNotSchedule
+          labelSelector:
+            matchLabels: {{- include "payments-api.selectorLabels" . | nindent 14 }}
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels: {{- include "payments-api.selectorLabels" . | nindent 14 }}
+      containers:
+        - name: api
+          image: {{ include "payments-api.image" . }}
+          ports: [{name: http, containerPort: 8000}]
+          envFrom:
+            - configMapRef: {name: payments-api}
+            - secretRef: {name: payments-api}
+          resources: {{- toYaml .Values.resources | nindent 12 }}
+          startupProbe:
+            httpGet: {path: /healthz, port: http}
+            periodSeconds: 2
+            failureThreshold: 30
+          livenessProbe:
+            httpGet: {path: /healthz, port: http}
+            periodSeconds: 10
+            failureThreshold: 3
+          readinessProbe:
+            httpGet: {path: /readyz, port: http}
+            periodSeconds: 5
+            failureThreshold: 2
+          lifecycle:
+            # Let the ingress/endpoints controller stop sending traffic before SIGTERM.
+            preStop:
+              exec: {command: ["sh", "-c", "sleep 10"]}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: {drop: [ALL]}
+          volumeMounts:
+            - {name: tmp, mountPath: /tmp}
+      volumes:
+        - name: tmp
+          emptyDir: {}

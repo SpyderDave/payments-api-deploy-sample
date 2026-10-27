@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: payments-api
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: payments-api
+  labels: {{- include "payments-api.selectorLabels" . | nindent 4 }}
+spec:
+  selector: {{- include "payments-api.selectorLabels" . | nindent 4 }}
+  ports:
+    - {name: http, port: 80, targetPort: http}
